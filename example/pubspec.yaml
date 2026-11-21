@@ -1,0 +1,45 @@
+name: core_canvas_engine_example
+description: "Demonstrates how to use the core_canvas_engine plugin."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  core_canvas_engine:
+    path: ../
+
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.1.6
+  open_filex: ^4.7.0
+  flutter_pdfview: ^1.4.5
+  image_picker: ^1.2.3
+  file_picker: 13.1.0
+  syncfusion_flutter_pdfviewer: ^33.2.13
+  share_plus: ^13.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+
+# ============================================================================
+# CORE CANVAS ENGINE: SMART 4-MODE BUILD CONFIG
+# - Omitted (Zero-Config): All 8 native modules are compiled (default).
+# - Preset:     preset: pdf_lite | pdf_pro | media | full
+# - Opt-In:     List only `true` flags (e.g., pdf: true, svg: true) -> rest OFF.
+# - Opt-Out:    List only `false` flags (e.g., lottie: false) -> rest ON.
+# ============================================================================
+# core_canvas_engine:
+#   preset: pdf_lite

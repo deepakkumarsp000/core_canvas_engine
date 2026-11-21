@@ -1,0 +1,29 @@
+# Ignore local scripts, dumps, and temporary files
+copy_file.py
+*.py
+lib_data_copy*.txt
+*.log
+*.tmp
+
+# Ignore build outputs, IDE files, and local caches
+build/
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Ignore example build artifacts & generated outputs
+example/build/
+example/.dart_tool/
+example/android/.gradle/
+example/ios/Pods/
+
+# Ignore unnecessary third-party tests, docs, and git folders
+third_party/**/.git/
+third_party/**/test/
+third_party/**/tests/
+third_party/**/example/
+third_party/**/examples/
+third_party/**/doc/
+third_party/**/docs/

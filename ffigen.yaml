@@ -1,0 +1,12 @@
+# FILE: ffigen.yaml
+# PURPOSE: Dart ko batana ki kaunsi C++ file padhni hai aur kahan Dart bindings generate karni hai.
+
+name: CanvasBindings
+description: Faang-Level Bindings for the Core Canvas C++ Engine
+output: 'lib/ffi/canvas_bindings.g.dart'
+headers:
+  entry-points:
+    - 'src/canvas_interface.h'
+comments:
+  style: any
+  length: full

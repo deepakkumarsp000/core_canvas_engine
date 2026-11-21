@@ -1,0 +1,224 @@
+// FILE: android/build.gradle
+// PURPOSE: Android NDK Gradle Build + 4-Mode Smart Auto-Detect pubspec.yaml Config Reader
+// Modes: Zero-Config (All ON), Strict Opt-In, Opt-Out (all: true / false-only), & 1-Line Presets.
+
+group = "com.example.core_canvas_engine"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.11.1")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+// ============================================================================
+// SMART 4-MODE PUBSPEC.YAML PARSER (Zero External Dependencies)
+// Strictly reads root-level (indent == 0) 'core_canvas_engine:' block and
+// ignores indented 'core_canvas_engine:' inside 'dependencies:'.
+// ============================================================================
+def readCanvasFeatureFlags() {
+    // Default (Zero-Config): All modules ON so new users get full power out of the box
+    def flags = [
+            ENABLE_PDF         : "ON",
+            ENABLE_SVG         : "ON",
+            ENABLE_SHADOWS     : "ON",
+            ENABLE_IMAGE_EXPORT: "ON",
+            ENABLE_WEBP        : "ON",
+            ENABLE_LOTTIE      : "ON",
+            ENABLE_GIF         : "ON",
+            ENABLE_HTML        : "ON"
+    ]
+    String resolvedMode = "ZERO-CONFIG (ALL ON)"
+
+    def moduleMap = [
+            "pdf"                : "ENABLE_PDF",
+            "enable_pdf"         : "ENABLE_PDF",
+            "svg"                : "ENABLE_SVG",
+            "enable_svg"         : "ENABLE_SVG",
+            "shadows"            : "ENABLE_SHADOWS",
+            "enable_shadows"     : "ENABLE_SHADOWS",
+            "image_export"       : "ENABLE_IMAGE_EXPORT",
+            "enable_image_export": "ENABLE_IMAGE_EXPORT",
+            "webp"               : "ENABLE_WEBP",
+            "enable_webp"        : "ENABLE_WEBP",
+            "lottie"             : "ENABLE_LOTTIE",
+            "enable_lottie"      : "ENABLE_LOTTIE",
+            "gif"                : "ENABLE_GIF",
+            "enable_gif"         : "ENABLE_GIF",
+            "html"               : "ENABLE_HTML",
+            "enable_html"        : "ENABLE_HTML"
+    ]
+
+    try {
+        File appPubspec = new File(rootProject.projectDir.parentFile, "pubspec.yaml")
+        if (!appPubspec.exists()) {
+            appPubspec = new File(projectDir.parentFile, "pubspec.yaml")
+        }
+
+        if (appPubspec.exists()) {
+            def lines = appPubspec.readLines("UTF-8")
+            boolean inCanvasBlock = false
+            def rawConfig = [:]
+
+            for (String rawLine : lines) {
+                String cleanLine = rawLine.replaceAll('#.*$', '')
+                if (cleanLine.trim().isEmpty()) continue
+
+                int indent = 0
+                while (indent < cleanLine.length() && (cleanLine.charAt(indent) == (' ' as char) || cleanLine.charAt(indent) == ('\t' as char))) {
+                    indent++
+                }
+                String trimmed = cleanLine.trim()
+
+                if (indent == 0) {
+                    if (trimmed == "core_canvas_engine:") {
+                        inCanvasBlock = true
+                        continue
+                    } else {
+                        inCanvasBlock = false
+                    }
+                }
+
+                if (inCanvasBlock && indent > 0) {
+                    def parts = trimmed.split(":", 2)
+                    if (parts.length == 2) {
+                        String key = parts[0].trim().toLowerCase()
+                        String val = parts[1].trim().replaceAll(/^['"]|['"]$/, '').toLowerCase()
+                        rawConfig[key] = val
+                    }
+                }
+            }
+
+            if (!rawConfig.isEmpty()) {
+                def parseBool = { String v ->
+                    return (v == "true" || v == "1" || v == "on" || v == "yes")
+                }
+
+                // Collect explicit boolean overrides for known native modules
+                def explicitModules = [:]
+                rawConfig.each { String k, String v ->
+                    if (moduleMap.containsKey(k)) {
+                        explicitModules[moduleMap[k]] = parseBool(v)
+                    }
+                }
+
+                String preset = rawConfig["preset"]
+                boolean hasAllTrue = (rawConfig.containsKey("all") && parseBool(rawConfig["all"])) ||
+                        (rawConfig.containsKey("full") && parseBool(rawConfig["full"]))
+                boolean hasAnyExplicitTrue = explicitModules.values().any { it == true }
+
+                if (preset != null && !preset.isEmpty()) {
+                    // MODE D: 1-Line Preset (+ optional per-module overrides)
+                    flags.keySet().each { flags[it] = "OFF" }
+                    switch (preset) {
+                        case "pdf_lite":
+                            flags.ENABLE_PDF = "ON"
+                            flags.ENABLE_SVG = "ON"
+                            resolvedMode = "PRESET (pdf_lite)"
+                            break
+                        case "pdf_pro":
+                            flags.ENABLE_PDF = "ON"
+                            flags.ENABLE_SVG = "ON"
+                            flags.ENABLE_SHADOWS = "ON"
+                            resolvedMode = "PRESET (pdf_pro)"
+                            break
+                        case "media":
+                            flags.ENABLE_SVG = "ON"
+                            flags.ENABLE_SHADOWS = "ON"
+                            flags.ENABLE_IMAGE_EXPORT = "ON"
+                            flags.ENABLE_WEBP = "ON"
+                            flags.ENABLE_GIF = "ON"
+                            resolvedMode = "PRESET (media)"
+                            break
+                        case "full":
+                        case "all":
+                        default:
+                            flags.keySet().each { flags[it] = "ON" }
+                            resolvedMode = "PRESET (full)"
+                            break
+                    }
+                    explicitModules.each { String flagKey, boolean enabled ->
+                        flags[flagKey] = enabled ? "ON" : "OFF"
+                    }
+                } else if (hasAllTrue || !hasAnyExplicitTrue) {
+                    // MODE C: Opt-Out Mode (all: true OR user only listed `false` exclusions)
+                    flags.keySet().each { flags[it] = "ON" }
+                    explicitModules.each { String flagKey, boolean enabled ->
+                        flags[flagKey] = enabled ? "ON" : "OFF"
+                    }
+                    resolvedMode = explicitModules.values().any { it == false }
+                            ? "OPT-OUT (ALL ON minus exclusions)"
+                            : "ALL ON"
+                } else {
+                    // MODE B: Strict Opt-In Mode (only user-listed `true` modules are compiled)
+                    flags.keySet().each { flags[it] = "OFF" }
+                    explicitModules.each { String flagKey, boolean enabled ->
+                        flags[flagKey] = enabled ? "ON" : "OFF"
+                    }
+                    resolvedMode = "STRICT OPT-IN (Minimal Size)"
+                }
+
+                // Dependency sync: GIF animation writer requires ImageCanvas framebuffer
+                if (flags.ENABLE_GIF == "ON" && flags.ENABLE_IMAGE_EXPORT == "OFF") {
+                    flags.ENABLE_IMAGE_EXPORT = "ON"
+                }
+            }
+        }
+    } catch (Exception e) {
+        println("[CoreCanvasEngine] pubspec.yaml parse fallback (defaulting to ALL ON): ${e.message}")
+    }
+
+    println("[CoreCanvasEngine] Mode: ${resolvedMode} | Modules -> PDF:${flags.ENABLE_PDF}, SVG:${flags.ENABLE_SVG}, SHADOWS:${flags.ENABLE_SHADOWS}, IMG:${flags.ENABLE_IMAGE_EXPORT}, WEBP:${flags.ENABLE_WEBP}, LOTTIE:${flags.ENABLE_LOTTIE}, GIF:${flags.ENABLE_GIF}, HTML:${flags.ENABLE_HTML}")
+    return flags
+}
+
+def canvasFlags = readCanvasFeatureFlags()
+
+android {
+    namespace = "com.example.core_canvas_engine"
+    compileSdk = 36
+    ndkVersion = android.ndkVersion
+
+    externalNativeBuild {
+        cmake {
+            path = "../src/CMakeLists.txt"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk = 24
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DENABLE_PDF=${canvasFlags.ENABLE_PDF}",
+                        "-DENABLE_SVG=${canvasFlags.ENABLE_SVG}",
+                        "-DENABLE_SHADOWS=${canvasFlags.ENABLE_SHADOWS}",
+                        "-DENABLE_IMAGE_EXPORT=${canvasFlags.ENABLE_IMAGE_EXPORT}",
+                        "-DENABLE_WEBP=${canvasFlags.ENABLE_WEBP}",
+                        "-DENABLE_LOTTIE=${canvasFlags.ENABLE_LOTTIE}",
+                        "-DENABLE_GIF=${canvasFlags.ENABLE_GIF}",
+                        "-DENABLE_HTML=${canvasFlags.ENABLE_HTML}",
+                        "-DANDROID_STL=c++_static"
+            }
+        }
+    }
+}
